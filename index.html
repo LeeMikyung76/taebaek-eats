@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>태백 맛집 지도</title>
+<meta name="description" content="태백의 식당과 카페를 지도와 목록으로 한눈에 보는 맛집 지도">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+:root{
+  --bg:#f5f3ee; --panel:#ffffff; --ink:#1c2420; --muted:#5d6a64; --line:#e3dfd6; --soft:#f0eee8;
+  --meal:#1f6b45; --cafe:#8a5a33; --pick:#e0502b;
+  --off-bg:#fde6de; --off-ink:#ad3517; --ok-bg:#e3f1e8; --ok-ink:#1f6b45;
+  --focus:#e0502b;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111613; --panel:#181e1b; --ink:#e6ece9; --muted:#9ba8a2; --line:#2a332f; --soft:#212825;
+  --meal:#3b9d6c; --cafe:#b9845a; --pick:#ff6a43;
+  --off-bg:#3b1f17; --off-ink:#ff9f83; --ok-bg:#1d3327; --ok-ink:#8fd3ab;
+}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.55 "Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  display:grid; grid-template-columns:clamp(380px,32vw,420px) minmax(0,1fr);
+  height:100vh; height:100dvh; overflow:hidden;
+}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+/* ---------- 왼쪽 패널 ---------- */
+.panel{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+.head{padding:18px 18px 12px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:24px;line-height:1.2;letter-spacing:-.02em}
+.count{margin:4px 0 12px;color:var(--muted);font-size:14px}
+.search{
+  width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+  background:var(--soft);color:var(--ink);font:inherit;
+}
+.search::placeholder{color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.filters button{
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  border-radius:999px;padding:6px 12px;font:inherit;font-size:13.5px;cursor:pointer;
+}
+.filters button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel);font-weight:700}
+.result{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+
+.scroll{flex:1;min-height:0;overflow-y:auto}
+#list{list-style:none;margin:0;padding:8px}
+.item{border-radius:12px}
+.item + .item{margin-top:2px}
+.row{
+  width:100%;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;
+  padding:10px;border:0;border-radius:12px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;
+}
+.row:hover{background:var(--soft)}
+.item.open{background:var(--soft);box-shadow:inset 3px 0 0 var(--pick)}
+.num{
+  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  color:#fff;font-size:12.5px;font-weight:700;margin-top:1px;
+}
+.num.meal{background:var(--meal)} .num.cafe{background:var(--cafe)}
+.item.open .num{background:var(--pick)}
+.name{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.name strong{font-size:16px}
+.tag{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+.menu{display:block;color:var(--muted);font-size:13.5px;margin-top:2px}
+.badge{font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap;background:var(--soft);color:var(--muted);margin-top:2px}
+.badge.ok{background:var(--ok-bg);color:var(--ok-ink)}
+.badge.off{background:var(--off-bg);color:var(--off-ink);font-weight:700}
+
+.detail{padding:0 12px 12px 48px}
+.detail dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0 0 10px;font-size:14px}
+.detail dt{color:var(--muted)}
+.detail dd{margin:0}
+.detail a{color:var(--pick);font-weight:700}
+.links{display:flex;flex-wrap:wrap;gap:6px}
+.links a{
+  text-decoration:none;font-size:13px;font-weight:700;padding:6px 10px;border-radius:8px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);
+}
+.links a:hover{border-color:var(--pick);color:var(--pick)}
+.empty{padding:24px 16px;text-align:center;color:var(--muted)}
+.note{margin:4px 16px 20px;padding:10px 12px;border-radius:10px;background:var(--soft);color:var(--muted);font-size:13px}
+
+/* ---------- 지도 ---------- */
+#map{height:100%;min-height:0;background:var(--soft)}
+.leaflet-marker-icon.pin-box{display:grid;place-items:center;pointer-events:none;border-radius:50%}
+.pin{
+  pointer-events:auto;cursor:pointer;
+  width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+  color:#fff;font:700 13px/1 system-ui,sans-serif;border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);transition:transform .15s;
+}
+.pin.meal{background:var(--meal)} .pin.cafe{background:var(--cafe)}
+.pin.picked{background:var(--pick);width:38px;height:38px;font-size:15px;border-width:3px}
+.pin-box:focus-visible{outline:none}
+.pin-box:focus-visible .pin{outline:3px solid var(--focus);outline-offset:2px}
+@media (prefers-color-scheme:dark){
+  .leaflet-tile-pane{filter:brightness(.75) contrast(1.1) saturate(.8)}
+  .leaflet-control-attribution,.leaflet-bar a{background:#1f2522!important;color:#cfd8d4!important}
+  .leaflet-control-attribution a{color:#ff9f83!important}
+}
+
+/* ---------- 모바일: 위 지도, 아래 목록 ---------- */
+@media (max-width:760px){
+  body{grid-template-columns:minmax(0,1fr);grid-template-rows:40vh minmax(0,1fr);grid-template-rows:40dvh minmax(0,1fr)}
+  #map{grid-row:1}
+  .panel{grid-row:2;border-right:0;border-top:1px solid var(--line)}
+  .head{padding:12px 16px 10px}
+  h1{font-size:20px}
+  .count{margin-bottom:8px}
+}
+@media (prefers-reduced-motion:reduce){.pin{transition:none}}
+</style>
+</head>
+<body>
+
+<aside class="panel">
+  <div class="head">
+    <h1>태백 맛집 지도</h1>
+    <p class="count" id="count"></p>
+    <label for="q" class="sr" style="position:absolute;left:-9999px">가게 검색</label>
+    <input id="q" class="search" type="search" placeholder="가게 이름·메뉴·위치 검색" autocomplete="off">
+    <div class="filters" role="group" aria-label="필터">
+      <button type="button" data-type="전체" aria-pressed="true">전체</button>
+      <button type="button" data-type="식사" aria-pressed="false">식사</button>
+      <button type="button" data-type="카페" aria-pressed="false">카페</button>
+      <button type="button" id="skipOff" aria-pressed="false">오늘 쉬는 곳 빼기</button>
+    </div>
+    <p class="result" id="result" aria-live="polite"></p>
+  </div>
+  <div class="scroll" id="scroll">
+    <ol id="list"></ol>
+    <p class="empty" id="empty" hidden>조건에 맞는 가게가 없어요.</p>
+    <p class="note">영업시간은 2026년 10월 기준이에요. 방문 전에 전화로 한 번 확인해 주세요.</p>
+  </div>
+</aside>
+
+<div id="map" role="region" aria-label="태백 맛집 지도"></div>
+
+<script>
+/*
+ * 가게 데이터 — 한 줄에 가게 하나. 목록 번호는 이 배열 순서대로 자동으로 붙어요.
+ *   type   : "식사" 또는 "카페" (마커 색이 달라져요)
+ *   hours  : 영업시간 문구, 모르면 ""
+ *   closed : 휴무 요일 배열 (0=일 1=월 … 6=토). 휴무 없음은 [], 모르면 null
+ *   tel    : 전화번호, 모르면 ""
+ *   cid    : 구글 지도 cid (큰 숫자라 꼭 따옴표로). 모르면 "" → 이름으로 검색해요
+ */
+const PLACES = [
+  { name:"이모네식당",  tag:"한식",          type:"식사", where:"태백역 앞",              menu:"집밥 같은 백반과 반찬",                                  hours:"24시간",                                closed:null, tel:"033-553-5812", lat:37.1763145, lng:128.9868425, cid:"1941832082308481171" },
+  { name:"청솔칼국수",  tag:"칼국수",        type:"식사", where:"황지동 253-108",         menu:"칼국수",                                                  hours:"",                                      closed:null, tel:"",             lat:37.1752349, lng:128.9884474, cid:"" },
+  { name:"미가구이",    tag:"고깃집",        type:"식사", where:"시내",                   menu:"두툼한 생삼겹살, 묵은지볶음",                              hours:"매일 10:00–23:00",                      closed:null, tel:"033-552-5042", lat:37.1687155, lng:128.9913771, cid:"7726863315866323174" },
+  { name:"이태리집",    tag:"이탈리안",      type:"식사", where:"번영로 262",             menu:"파스타, 떡볶이",                                          hours:"평일 11:00–21:00 · 토 11:00–15:00",     closed:[0],  tel:"033-553-9900", lat:37.1663295, lng:128.9863796, cid:"14726788216951800091" },
+  { name:"그집쭈꾸미",  tag:"쭈꾸미",        type:"식사", where:"시내",                   menu:"쭈꾸미볶음, 마무리는 볶음밥",                              hours:"매일 11:00–21:00",                      closed:null, tel:"033-533-8901", lat:37.1613152, lng:128.9907907, cid:"2156927255912613858" },
+  { name:"도야지",      tag:"돼지구이",      type:"식사", where:"황지동",                 menu:"연탄 돼지구이",                                          hours:"매일 10:00–21:30",                      closed:null, tel:"033-554-1189", lat:37.1586793, lng:128.9879001, cid:"6928074590855349894" },
+  { name:"웍",          tag:"중식",          type:"식사", where:"시내",                   menu:"동파육, 짬뽕",                                            hours:"",                                      closed:null, tel:"033-554-3317", lat:37.1620761, lng:128.9824105, cid:"4201925550826693960" },
+  { name:"미찌",        tag:"일식",          type:"식사", where:"서학로",                 menu:"일식",                                                    hours:"11:00–19:30",                           closed:[1],  tel:"",             lat:37.1550734, lng:128.9860502, cid:"16739174107829640907" },
+  { name:"초막고갈두",  tag:"생선·두부조림", type:"식사", where:"백두대간로 · 북쪽 외곽", menu:"고등어·갈치·두부조림. 점심 장사만 하고 대기가 있을 수 있어요", hours:"10:00–15:00",                           closed:[0],  tel:"033-553-7388", lat:37.2051716, lng:128.9832449, cid:"15311497736786341779" },
+  { name:"강산막국수",  tag:"막국수",        type:"식사", where:"소도길 · 남쪽 외곽",     menu:"막국수, 감자전",                                          hours:"매일 11:30–21:00",                      closed:[],   tel:"033-552-6680", lat:37.1363502, lng:128.9757542, cid:"6675456171451850695" },
+  { name:"꼬마전병",    tag:"전병",          type:"식사", where:"황지동 404-2",           menu:"전병",                                                    hours:"",                                      closed:null, tel:"033-552-6272", lat:37.1590365, lng:128.9812442, cid:"2348784518371042910" },
+  { name:"카페 나무",   tag:"카페",          type:"카페", where:"황지동",                 menu:"커피, 버거, 디저트",                                      hours:"",                                      closed:[1],  tel:"033-554-3373", lat:37.162678,  lng:128.982465,  cid:"1873284966812217919" },
+  { name:"베이크우드",  tag:"카페·베이커리", type:"카페", where:"황지로 · 태백역 근처",   menu:"휘낭시에 맛집. 베이글·빵과 커피",                          hours:"평일 09:30–20:00 · 주말 11:30–20:00",   closed:null, tel:"033-554-0515", lat:37.1759575, lng:128.988552,  cid:"5698639423397138755" },
+  { name:"숲향긋 카페", tag:"카페",          type:"카페", where:"황지동",                 menu:"커피",                                                    hours:"",                                      closed:null, tel:"",             lat:37.154059,  lng:128.98264,   cid:"13734336807386761295" },
+];
+
+const DAY_NAMES = ["일","월","화","수","목","금","토"];
+// 보는 사람이 어디에 있든 태백(한국) 날짜 기준으로 오늘 요일을 계산한다.
+const TODAY = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(
+  new Intl.DateTimeFormat("en-US", { timeZone:"Asia/Seoul", weekday:"short" }).format(new Date())
+);
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const cls = p => p.type === "카페" ? "cafe" : "meal";
+const isOffToday = p => Array.isArray(p.closed) && p.closed.includes(TODAY);
+
+function links(p) {
+  return {
+    naver: "https://map.naver.com/p/search/" + encodeURIComponent("태백 " + p.name),
+    kakao: "https://map.kakao.com/link/map/" + encodeURIComponent(p.name) + "," + p.lat + "," + p.lng,
+    google: p.cid ? "https://maps.google.com/?cid=" + p.cid
+                  : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("태백 " + p.name),
+  };
+}
+
+function badge(p) {
+  if (isOffToday(p)) return `<span class="badge off">오늘 휴무</span>`;
+  if (Array.isArray(p.closed) && p.closed.length === 0) return `<span class="badge ok">연중무휴</span>`;
+  if (Array.isArray(p.closed)) return `<span class="badge">${p.closed.map(d => DAY_NAMES[d]).join("·")} 휴무</span>`;
+  return "";
+}
+
+function closedText(p) {
+  if (p.closed === null) return "정보 없음";
+  if (p.closed.length === 0) return "없음 (연중무휴)";
+  return "매주 " + p.closed.map(d => DAY_NAMES[d] + "요일").join(", ") + (isOffToday(p) ? " · 오늘 휴무" : "");
+}
+
+/* ---------- 지도 ---------- */
+const map = L.map("map", { zoomControl:true });
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+}).addTo(map);
+
+// 아이콘 상자는 선택 여부와 상관없이 같은 크기로 두고, 안쪽 동그라미 크기만 바꾼다.
+// (아이콘을 새로 만들면 키보드 포커스가 사라지기 때문)
+const markers = PLACES.map((p, i) =>
+  L.marker([p.lat, p.lng], {
+    icon: L.divIcon({ className: "pin-box", html: `<div class="pin ${cls(p)}">${i + 1}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }),
+    title: `${i + 1}. ${p.name}`,
+    keyboard: true,
+  })
+    .on("click", () => toggle(i, true))
+    .on("keypress", e => {
+      // Leaflet 마커는 Enter를 팝업에만 쓰므로, Enter·Space를 직접 클릭처럼 처리한다.
+      if (e.originalEvent.key === "Enter" || e.originalEvent.key === " ") {
+        e.originalEvent.preventDefault();
+        toggle(i, true);
+      }
+    })
+    .addTo(map)
+);
+map.fitBounds(L.latLngBounds(PLACES.map(p => [p.lat, p.lng])), { padding:[40, 40] });
+
+/* ---------- 목록 ---------- */
+const listEl = document.getElementById("list");
+listEl.innerHTML = PLACES.map((p, i) => {
+  const l = links(p);
+  return `<li class="item" id="item-${i}">
+    <button type="button" class="row" aria-expanded="false" aria-controls="detail-${i}">
+      <span class="num ${cls(p)}" aria-hidden="true">${i + 1}</span>
+      <span>
+        <span class="name"><strong>${esc(p.name)}</strong><span class="tag">${esc(p.tag)}</span></span>
+        <span class="menu">${esc(p.menu)}</span>
+      </span>
+      ${badge(p)}
+    </button>
+    <div class="detail" id="detail-${i}" hidden>
+      <dl>
+        <dt>위치</dt><dd>${esc(p.where)}</dd>
+        <dt>영업시간</dt><dd>${esc(p.hours || "정보 없음")}</dd>
+        <dt>휴무일</dt><dd>${esc(closedText(p))}</dd>
+        <dt>전화</dt><dd>${p.tel ? `<a href="tel:${esc(p.tel.replace(/[^0-9+]/g, ""))}">${esc(p.tel)}</a>` : "정보 없음"}</dd>
+      </dl>
+      <div class="links">
+        <a href="${esc(l.naver)}" target="_blank" rel="noopener">네이버 지도 ↗</a>
+        <a href="${esc(l.kakao)}" target="_blank" rel="noopener">카카오맵 ↗</a>
+        <a href="${esc(l.google)}" target="_blank" rel="noopener">구글 지도 ↗</a>
+      </div>
+    </div>
+  </li>`;
+}).join("");
+
+const items = PLACES.map((_, i) => document.getElementById("item-" + i));
+items.forEach((li, i) => li.querySelector(".row").addEventListener("click", () => toggle(i, false)));
+
+const meals = PLACES.filter(p => p.type === "식사").length;
+document.getElementById("count").textContent = `식당 ${meals}곳 · 카페 ${PLACES.length - meals}곳`;
+
+/* ---------- 선택 ---------- */
+let selected = -1;
+
+function setOpen(i, open) {
+  const li = items[i];
+  li.classList.toggle("open", open);
+  li.querySelector(".row").setAttribute("aria-expanded", open);
+  li.querySelector(".detail").hidden = !open;
+  markers[i].getElement()?.querySelector(".pin").classList.toggle("picked", open);
+  markers[i].setZIndexOffset(open ? 1000 : 0);
+}
+
+function toggle(i, fromMarker) {
+  if (selected === i) {          // 다시 누르면 닫기
+    setOpen(i, false);
+    selected = -1;
+    return;
+  }
+  if (selected >= 0) setOpen(selected, false);
+  selected = i;
+  setOpen(i, true);
+  map.flyTo([PLACES[i].lat, PLACES[i].lng], Math.max(map.getZoom(), 17), { duration: 0.6 });
+  if (fromMarker) scrollToItem(items[i]);
+}
+
+// 페이지 전체가 아니라 목록 영역만 스크롤해서, 모바일에서도 지도가 화면에 남게 한다.
+function scrollToItem(li) {
+  const box = document.getElementById("scroll");
+  const top = li.offsetTop - box.offsetTop - 8;
+  box.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+/* ---------- 검색·필터 ---------- */
+const state = { type: "전체", skipOff: false, q: "" };
+const norm = s => s.replace(/\s+/g, "").toLowerCase();
+
+function applyFilters() {
+  const q = norm(state.q);
+  let shown = 0;
+  PLACES.forEach((p, i) => {
+    const ok = (state.type === "전체" || p.type === state.type)
+      && !(state.skipOff && isOffToday(p))
+      && (!q || norm(p.name + p.tag + p.menu + p.where).includes(q));
+    items[i].hidden = !ok;
+    if (ok) { shown++; if (!map.hasLayer(markers[i])) markers[i].addTo(map); }
+    else {
+      if (selected === i) { setOpen(i, false); selected = -1; }
+      markers[i].remove();
+    }
+  });
+  document.getElementById("empty").hidden = shown > 0;
+  document.getElementById("result").textContent =
+    shown === PLACES.length ? `오늘은 ${DAY_NAMES[TODAY]}요일이에요.` : `${PLACES.length}곳 중 ${shown}곳을 보여 줘요.`;
+}
+
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; applyFilters(); });
+document.querySelectorAll(".filters [data-type]").forEach(btn => btn.addEventListener("click", () => {
+  state.type = btn.dataset.type;
+  document.querySelectorAll(".filters [data-type]").forEach(b => b.setAttribute("aria-pressed", b === btn));
+  applyFilters();
+}));
+document.getElementById("skipOff").addEventListener("click", e => {
+  state.skipOff = !state.skipOff;
+  e.currentTarget.setAttribute("aria-pressed", state.skipOff);
+  applyFilters();
+});
+
+applyFilters();
+</script>
+</body>
+</html>
