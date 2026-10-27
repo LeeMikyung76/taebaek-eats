@@ -35,12 +35,7 @@ body{
 .head{padding:18px 18px 12px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:24px;line-height:1.2;letter-spacing:-.02em}
 .count{margin:4px 0 12px;color:var(--muted);font-size:14px}
-.search{
-  width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
-  background:var(--soft);color:var(--ink);font:inherit;
-}
-.search::placeholder{color:var(--muted)}
-.filters{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
 .filters button{
   border:1px solid var(--line);background:var(--panel);color:var(--ink);
   border-radius:999px;padding:6px 12px;font:inherit;font-size:13.5px;cursor:pointer;
@@ -123,8 +118,6 @@ h1{margin:0;font-size:24px;line-height:1.2;letter-spacing:-.02em}
   <div class="head">
     <h1>태백 맛집 지도</h1>
     <p class="count" id="count"></p>
-    <label for="q" class="sr" style="position:absolute;left:-9999px">가게 검색</label>
-    <input id="q" class="search" type="search" placeholder="가게 이름·메뉴·위치 검색" autocomplete="off">
     <div class="filters" role="group" aria-label="필터">
       <button type="button" data-type="전체" aria-pressed="true">전체</button>
       <button type="button" data-type="식사" aria-pressed="false">식사</button>
@@ -295,17 +288,14 @@ function scrollToItem(li) {
   box.scrollTo({ top, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
 
-/* ---------- 검색·필터 ---------- */
-const state = { type: "전체", skipOff: false, q: "" };
-const norm = s => s.replace(/\s+/g, "").toLowerCase();
+/* ---------- 필터 ---------- */
+const state = { type: "전체", skipOff: false };
 
 function applyFilters() {
-  const q = norm(state.q);
   let shown = 0;
   PLACES.forEach((p, i) => {
     const ok = (state.type === "전체" || p.type === state.type)
-      && !(state.skipOff && isOffToday(p))
-      && (!q || norm(p.name + p.tag + p.menu + p.where).includes(q));
+      && !(state.skipOff && isOffToday(p));
     items[i].hidden = !ok;
     if (ok) { shown++; if (!map.hasLayer(markers[i])) markers[i].addTo(map); }
     else {
@@ -318,7 +308,6 @@ function applyFilters() {
     shown === PLACES.length ? `오늘은 ${DAY_NAMES[TODAY]}요일이에요.` : `${PLACES.length}곳 중 ${shown}곳을 보여 줘요.`;
 }
 
-document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; applyFilters(); });
 document.querySelectorAll(".filters [data-type]").forEach(btn => btn.addEventListener("click", () => {
   state.type = btn.dataset.type;
   document.querySelectorAll(".filters [data-type]").forEach(b => b.setAttribute("aria-pressed", b === btn));
