@@ -1,6 +1,6 @@
 # 태백 맛집 지도 (taebaek-eats)
 
-태백의 식당 11곳과 카페 3곳을 지도와 목록으로 보는 한 페이지짜리 웹 앱입니다.
+태백의 식당 12곳과 카페 3곳을 지도와 목록으로 보는 한 페이지짜리 웹 앱입니다.
 빌드 도구 없이 `index.html` 한 파일(HTML + CSS + JS)로 되어 있어요.
 
 - 지도: [Leaflet](https://leafletjs.com/) 1.9.4 + [OpenStreetMap](https://www.openstreetmap.org/copyright) 타일
